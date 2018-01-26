@@ -41,9 +41,9 @@ type Server struct {
 	KeyFilePath  string `json:"key_file_path"`
 	CommFilePath string `json:"comm_file_path"`
 
-	key []byte        // a big-endian marshaled big.Int representing an elliptic curve scalar
-	G   *crypto.Point // elliptic curve point representation of generator G
-	H   *crypto.Point // elliptic curve point representation of commitment H to key
+	keys [][]byte      // a big-endian marshaled big.Int representing an elliptic curve scalar
+	G    *crypto.Point // elliptic curve point representation of generator G
+	H    *crypto.Point // elliptic curve point representation of commitment H to keys[0]
 }
 
 var DefaultServer = &Server{
@@ -104,7 +104,8 @@ func (c *Server) handle(conn *net.TCPConn) error {
 	switch request.Type {
 	case btd.ISSUE:
 		metrics.CounterIssueTotal.Inc()
-		err = btd.HandleIssue(conn, request, c.key, c.G, c.H, c.MaxTokens)
+		// use the first key as issue key
+		err = btd.HandleIssue(conn, request, c.keys[0], c.G, c.H, c.MaxTokens)
 		if err != nil {
 			metrics.CounterIssueError.Inc()
 			return err
@@ -112,7 +113,7 @@ func (c *Server) handle(conn *net.TCPConn) error {
 		return nil
 	case btd.REDEEM:
 		metrics.CounterRedeemTotal.Inc()
-		err = btd.HandleRedeem(conn, request, wrapped.Host, wrapped.Path, c.key)
+		err = btd.HandleRedeem(conn, request, wrapped.Host, wrapped.Path, c.keys)
 		if err != nil {
 			metrics.CounterRedeemError.Inc()
 			conn.Write([]byte(err.Error())) // anything other than "success" counts as a VERIFY_ERROR
@@ -134,17 +135,17 @@ func (c *Server) loadKeys() error {
 		return ErrEmptyCommPath
 	}
 
-	_, key, err := crypto.ParseKeyFile(c.KeyFilePath)
+	_, keys, err := crypto.ParseKeyFile(c.KeyFilePath)
 	if err != nil {
 		return err
 	}
-	c.key = key
+	c.keys = keys
 
 	return nil
 }
 
 func (c *Server) ListenAndServe() error {
-	if c.key == nil {
+	if len(c.keys) == 0 {
 		return ErrNoSecretKey
 	}
 
@@ -251,7 +252,7 @@ func main() {
 	}
 
 	// Retrieve the actual elliptic curve points for the commitment
-	srv.G, srv.H, err = crypto.RetrieveCommPoints(GBytes, HBytes, srv.key)
+	srv.G, srv.H, err = crypto.RetrieveCommPoints(GBytes, HBytes, srv.keys[0])
 	if err != nil {
 		errLog.Fatal(err)
 		return

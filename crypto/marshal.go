@@ -13,13 +13,15 @@ import (
 // ParseKeyFile decodes a PEM-encoded EC PRIVATE KEY to a big-endian byte slice
 // representing the secret scalar, which is the format expected by most curve
 // math functions in Go crypto/elliptic.
-func ParseKeyFile(keyFilePath string) (elliptic.Curve, []byte, error) {
+func ParseKeyFile(keyFilePath string) ([]elliptic.Curve, [][]byte, error) {
 	encodedKey, err := ioutil.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, nil, err
 	}
 	var skippedTypes []string
 	var block *pem.Block
+	var curves []elliptic.Curve
+	var keys [][]byte
 
 	for {
 		block, encodedKey = pem.Decode(encodedKey)
@@ -29,18 +31,22 @@ func ParseKeyFile(keyFilePath string) (elliptic.Curve, []byte, error) {
 		}
 
 		if block.Type == "EC PRIVATE KEY" {
-			break
+			privKey, err := x509.ParseECPrivateKey(block.Bytes)
+			if err != nil {
+				return nil, nil, err
+			}
+			curves = append(curves, privKey.PublicKey.Curve)
+			keys = append(keys, privKey.D.Bytes())
 		} else {
 			skippedTypes = append(skippedTypes, block.Type)
-			continue
+		}
+
+		if len(encodedKey) == 0 {
+			break
 		}
 	}
 
-	privKey, err := x509.ParseECPrivateKey(block.Bytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return privKey.PublicKey.Curve, privKey.D.Bytes(), nil
+	return curves, keys, nil
 }
 
 // Load the commitment to a generator that is currently in use as well.

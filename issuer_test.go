@@ -236,7 +236,7 @@ func TestTokenRedemption(t *testing.T) {
 
 	// Server
 	// Check valid token redemption
-	err = RedeemToken(*blRedempreq, testHost, testPath, x)
+	err = RedeemToken(*blRedempreq, testHost, testPath, [][]byte{x})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestBadMAC(t *testing.T) {
 
 	// Server
 	// Check bad token redemption
-	err = RedeemToken(*blRedempreq, []byte("something bad"), []byte("something worse"), x)
+	err = RedeemToken(*blRedempreq, []byte("something bad"), []byte("something worse"), [][]byte{x})
 	if err == nil {
 		t.Fatal("No error occurred even though MAC should be bad")
 	}
